@@ -21,9 +21,9 @@
 #include <EMotionStudio/Plugins/StandardPlugins/Source/AnimGraph/BlendGraphViewWidget.h>
 #include <EMotionStudio/Plugins/StandardPlugins/Source/AnimGraph/BlendGraphWidget.h>
 #include <EMotionStudio/Plugins/StandardPlugins/Source/AnimGraph/NodePaletteWidget.h>
+#include <EMotionStudio/Plugins/StandardPlugins/Source/AnimGraph/SolidColorIconEngine.h>
 #include <EMotionStudio/Plugins/StandardPlugins/Source/MotionSetsWindow/MotionSetsWindowPlugin.h>
 #include <QMenu>
-
 
 namespace EMStudio
 {
@@ -66,24 +66,27 @@ namespace EMStudio
     }
 
 
-    void BlendGraphWidget::AddNodeGroupSubmenu(QMenu* menu, EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& selectedNodes)
+    void BlendGraphWidget::AddAssignNodeGroupSubmenu(QMenu* menu, EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& selectedNodes)
     {
-        // node group sub menu
-        QMenu* nodeGroupMenu = new QMenu("Node Group", menu);
-        bool isNodeInNoneGroup = true;
-        QAction* noneNodeGroupAction = nodeGroupMenu->addAction("None");
-        noneNodeGroupAction->setData(qulonglong(0)); // this index is there to know it's the real none action in case one node group is also called like that
-        connect(noneNodeGroupAction, &QAction::triggered, this, &BlendGraphWidget::OnNodeGroupSelected);
-        noneNodeGroupAction->setCheckable(true);
-
         const size_t numNodeGroups = animGraph->GetNumNodeGroups();
+        if (numNodeGroups == 0)
+        {
+            return;
+        }
+
+        // node group sub menu
+        QMenu* nodeGroupMenu = new QMenu("Assign Node Group", menu);
+        bool isNodeInNoneGroup = true;
+
         for (size_t i = 0; i < numNodeGroups; ++i)
         {
             EMotionFX::AnimGraphNodeGroup* nodeGroup = animGraph->GetNodeGroup(i);
 
-            QAction* nodeGroupAction = nodeGroupMenu->addAction(nodeGroup->GetName());
+            AZ::Color nodeGroupColor;
+            nodeGroupColor.FromU32(nodeGroup->GetColor());
+            QAction* nodeGroupAction = nodeGroupMenu->addAction(QIcon(new SolidColorIconEngine(nodeGroupColor)), nodeGroup->GetName());
             nodeGroupAction->setData(qulonglong(i + 1)); // index of the menu added, not used
-            connect(nodeGroupAction, &QAction::triggered, this, &BlendGraphWidget::OnNodeGroupSelected);
+            connect(nodeGroupAction, &QAction::triggered, this, &BlendGraphWidget::OnNodeGroupAssigned);
             nodeGroupAction->setCheckable(true);
 
             if (selectedNodes.size() == 1)
@@ -98,18 +101,6 @@ namespace EMStudio
                 {
                     nodeGroupAction->setChecked(false);
                 }
-            }
-        }
-
-        if (selectedNodes.size() == 1)
-        {
-            if (isNodeInNoneGroup)
-            {
-                noneNodeGroupAction->setChecked(true);
-            }
-            else
-            {
-                noneNodeGroupAction->setChecked(false);
             }
         }
 
@@ -176,37 +167,72 @@ namespace EMStudio
         {
             // check if we have actually clicked a node and if it is selected, only show the menu if both cases are true
             GraphNode* graphNode = nodeGraph->FindNode(localMousePos);
+            EMotionFX::AnimGraphNodeGroup* nodeGroup = nodeGraph->FindNodeGroup(localMousePos);
             if (graphNode == nullptr)
             {
                 QMenu* menu = new QMenu(parentWidget);
 
-                if (actionFilter.m_copyAndPaste && actionManager.GetIsReadyForPaste() && nodeGraph->GetModelIndex().isValid())
+
+                if (nodeGroup == nullptr)
                 {
-                    menu->addAction(viewWidget->GetAction(BlendGraphViewWidget::EDIT_PASTE));
-                    menu->addSeparator();
-                }
-
-                if (actionFilter.m_createNodes)
-                {
-                    QMenu* createNodeMenu = menu->addMenu("Create Node");
-
-                    const AZStd::vector<EMotionFX::AnimGraphNode::ECategory> categories =
+                    if (actionFilter.m_copyAndPaste && actionManager.GetIsReadyForPaste() && nodeGraph->GetModelIndex().isValid())
                     {
-                        EMotionFX::AnimGraphNode::CATEGORY_SOURCES,
-                        EMotionFX::AnimGraphNode::CATEGORY_BLENDING,
-                        EMotionFX::AnimGraphNode::CATEGORY_CONTROLLERS,
-                        EMotionFX::AnimGraphNode::CATEGORY_PHYSICS,
-                        EMotionFX::AnimGraphNode::CATEGORY_LOGIC,
-                        EMotionFX::AnimGraphNode::CATEGORY_MATH,
-                        EMotionFX::AnimGraphNode::CATEGORY_MISC
-                    };
-
-                    // Create sub-menus for each of the categories that are possible to be added to the currently focused graph.
-                    EMotionFX::AnimGraphNode* currentNode = nodeGraph->GetModelIndex().data(AnimGraphModel::ROLE_NODE_POINTER).value<EMotionFX::AnimGraphNode*>();
-                    for (const EMotionFX::AnimGraphNode::ECategory category: categories)
-                    {
-                        AddAnimGraphObjectCategoryMenu(plugin, createNodeMenu, category, currentNode);
+                        menu->addAction(viewWidget->GetAction(BlendGraphViewWidget::EDIT_PASTE));
+                        menu->addSeparator();
                     }
+
+                    if (actionFilter.m_createNodes)
+                    {
+                        QMenu* createNodeMenu = menu->addMenu("Create Node");
+
+                        const AZStd::vector<EMotionFX::AnimGraphNode::ECategory> categories =
+                        {
+                            EMotionFX::AnimGraphNode::CATEGORY_SOURCES,
+                            EMotionFX::AnimGraphNode::CATEGORY_BLENDING,
+                            EMotionFX::AnimGraphNode::CATEGORY_CONTROLLERS,
+                            EMotionFX::AnimGraphNode::CATEGORY_PHYSICS,
+                            EMotionFX::AnimGraphNode::CATEGORY_LOGIC,
+                            EMotionFX::AnimGraphNode::CATEGORY_MATH,
+                            EMotionFX::AnimGraphNode::CATEGORY_MISC
+                        };
+
+                        // Create sub-menus for each of the categories that are possible to be added to the currently focused graph.
+                        EMotionFX::AnimGraphNode* currentNode = nodeGraph->GetModelIndex().data(AnimGraphModel::ROLE_NODE_POINTER).value<EMotionFX::AnimGraphNode*>();
+                        for (const EMotionFX::AnimGraphNode::ECategory category: categories)
+                        {
+                            AddAnimGraphObjectCategoryMenu(plugin, createNodeMenu, category, currentNode);
+                        }
+                    }
+                }
+                else
+                {
+                    QMenu* editNodeGroupMenu = menu->addMenu("Edit Node Group");
+
+                    // Rename group
+                    QAction* renameNodeGroupAction = editNodeGroupMenu->addAction(QIcon(":/EMotionFX/Rename.svg"), "Rename Group");
+                    connect(renameNodeGroupAction, &QAction::triggered, this, [=]() { OnRenameNodeGroup(nodeGroup); });
+
+                    // Edit group color
+                    AZ::Color nodeGroupColor;
+                    nodeGroupColor.FromU32(nodeGroup->GetColor());
+                    QAction* editNodeGroupColor = editNodeGroupMenu->addAction(QIcon(new SolidColorIconEngine(nodeGroupColor)), "Edit Group Color...");
+                    connect(editNodeGroupColor, &QAction::triggered, this, [=]() { OnChangeNodeGroupColor(nodeGroup); });
+
+                    // Remove group
+                    QAction* removeNodeGroupAction = menu->addAction("Remove Node Group");
+                    connect(removeNodeGroupAction, &QAction::triggered, this, [=]() { OnRemoveNodeGroup(nodeGroup); });
+                    menu->addSeparator();
+
+                    // Hide Group
+                    QAction* hideNodeGroupAction = menu->addAction("Hide Group");
+                    connect(hideNodeGroupAction, &QAction::triggered, this, [=]() { OnHideGroup(nodeGroup); });
+                    menu->addSeparator();
+
+                    // Delete selected nodes
+                    QAction* deleteSelectedNodesAction = menu->addAction("Delete Selected Nodes");
+                    deleteSelectedNodesAction->setEnabled(selectedNodes.size() > 0);
+                    connect(deleteSelectedNodesAction, &QAction::triggered, this, [=]() { DeleteSelectedItems(); });
+                    deleteSelectedNodesAction->setShortcut({Qt::Key_Delete});
                 }
 
                 connect(menu, &QMenu::triggered, menu, &QMenu::deleteLater);
@@ -364,11 +390,17 @@ namespace EMStudio
                 }
             }
 
-            // add the node group sub menu
+            // add the create node group action
+            if (animGraphNode->GetAnimGraph()->FindNodeGroupForNode(selectedNodes[0]) == nullptr) {
+                QAction* createNodeGroupAction = menu->addAction("Create Node Group");
+                connect(createNodeGroupAction, &QAction::triggered, this, &BlendGraphWidget::OnNodeGroupCreated);
+            }
+
+            // add the assign node group sub menu
             if (actionFilter.m_editNodeGroups &&
                 !inReferenceGraph && animGraphNode->GetParentNode())
             {
-                AddNodeGroupSubmenu(menu, animGraphNode->GetAnimGraph(), selectedNodes);
+                AddAssignNodeGroupSubmenu(menu, animGraphNode->GetAnimGraph(), selectedNodes);
             }
 
             connect(menu, &QMenu::triggered, menu, &QMenu::deleteLater);
@@ -489,10 +521,19 @@ namespace EMStudio
                 }
             }
 
+            // add the create node group action
+            bool all_nodes_are_ungrouped = std::all_of(selectedNodes.cbegin(), selectedNodes.cend(), [&](EMotionFX::AnimGraphNode* node) {
+                return node->GetAnimGraph()->FindNodeGroupForNode(node) == nullptr;
+            });
+            if (all_nodes_are_ungrouped) {
+                QAction* createNodeGroupAction = menu.addAction("Create Node Group");
+                connect(createNodeGroupAction, &QAction::triggered, this, &BlendGraphWidget::OnNodeGroupCreated);
+            }
+
             if (actionFilter.m_editNodeGroups &&
                 !inReferenceGraph)
             {
-                AddNodeGroupSubmenu(&menu, selectedNodes[0]->GetAnimGraph(), selectedNodes);
+                AddAssignNodeGroupSubmenu(&menu, selectedNodes[0]->GetAnimGraph(), selectedNodes);
             }
 
             if (!menu.isEmpty())

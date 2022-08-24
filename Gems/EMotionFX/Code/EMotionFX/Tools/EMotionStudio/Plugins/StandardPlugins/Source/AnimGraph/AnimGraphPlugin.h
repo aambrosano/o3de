@@ -57,7 +57,6 @@ namespace EMStudio
     class AttributesWindow;
     class GraphNodeFactory;
     class ParameterWindow;
-    class NodeGroupWindow;
     class BlendGraphViewWidget;
     class AnimGraphPlugin;
     class TimeViewPlugin;
@@ -188,13 +187,11 @@ namespace EMStudio
         NodePaletteWidget* GetPaletteWidget()                  { return m_paletteWidget; }
         AttributesWindow* GetAttributesWindow()                { return m_attributesWindow; }
         ParameterWindow* GetParameterWindow()                  { return m_parameterWindow; }
-        NodeGroupWindow* GetNodeGroupWidget()                  { return m_nodeGroupWindow; }
         BlendGraphViewWidget* GetViewWidget()                  { return m_viewWidget; }
         NavigationHistory* GetNavigationHistory() const        { return m_navigationHistory; }
 
         QDockWidget* GetNodePaletteDock()                      { return m_nodePaletteDock; }
         QDockWidget* GetParameterDock()                        { return m_parameterDock; }
-        QDockWidget* GetNodeGroupDock()                        { return m_nodeGroupDock; }
 
         void SetDisplayFlagEnabled(uint32 flags, bool enabled)
         {
@@ -232,8 +229,7 @@ namespace EMStudio
         enum EDockWindowOptionFlag
         {
             WINDOWS_PARAMETERWINDOW = 1,
-            WINDOWS_NODEGROUPWINDOW = 2,
-            WINDOWS_PALETTEWINDOW = 3,
+            WINDOWS_PALETTEWINDOW = 2,
 
             NUM_DOCKWINDOW_OPTIONS //automatically gets the next number assigned
         };
@@ -258,13 +254,11 @@ namespace EMStudio
         NodePaletteWidget*                          m_paletteWidget;
         AttributesWindow*                           m_attributesWindow;
         ParameterWindow*                            m_parameterWindow;
-        NodeGroupWindow*                            m_nodeGroupWindow;
         BlendGraphViewWidget*                       m_viewWidget;
         NavigationHistory*                          m_navigationHistory;
 
         QDockWidget*                                m_nodePaletteDock;
         QDockWidget*                                m_parameterDock;
-        QDockWidget*                                m_nodeGroupDock;
         QAction*                                    m_dockWindowActions[NUM_DOCKWINDOW_OPTIONS];
         EMotionFX::AnimGraph*                       m_activeAnimGraph;
 

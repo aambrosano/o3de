@@ -10,6 +10,7 @@
 #include <EMotionFX/CommandSystem/Source/AnimGraphConnectionCommands.h>
 #include <EMotionFX/Source/ActorManager.h>
 #include <EMotionFX/Source/AnimGraphMotionNode.h>
+#include <EMotionFX/Source/AnimGraphNodeGroup.h>
 #include <EMotionFX/Source/AnimGraphStateMachine.h>
 #include <EMotionFX/Source/Motion.h>
 #include <EMotionFX/Source/MotionManager.h>
@@ -1267,7 +1268,16 @@ namespace EMStudio
         {
             // check if double clicked on a node
             GraphNode* node = m_activeGraph->FindNode(mousePos);
-            if (node == nullptr)
+            EMotionFX::AnimGraphNodeGroup* nodeGroup = m_activeGraph->FindNodeGroup(mousePos);
+
+            if (nodeGroup)
+            {
+                if (m_activeGraph->GetIsInsideNodeGroupTitleRect(nodeGroup, mousePos) && !nodeGroup->GetNameEditOngoing())
+                {
+                    m_activeGraph->EnableNameEditForNodeGroup(nodeGroup);
+                }
+            }
+            else if (node == nullptr)
             {
                 // if we didn't double click on a node zoom in to the clicked area
                 m_activeGraph->ScrollTo(-LocalToGlobal(mousePos) + geometry().center());

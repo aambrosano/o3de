@@ -18,9 +18,14 @@
 #endif
 
 QT_FORWARD_DECLARE_CLASS(QPainter)
-
+QT_FORWARD_DECLARE_CLASS(QLineEdit);
 
 #define NODEGRAPHWIDGET_USE_OPENGL
+
+namespace EMotionFX
+{
+    class AnimGraphNodeGroup;
+}
 
 namespace EMStudio
 {

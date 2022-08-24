@@ -70,7 +70,7 @@ namespace EMStudio
         bool CheckIfIsStateMachine();
 
         // context menu shared function (definitions in ContextMenu.cpp)
-        void AddNodeGroupSubmenu(QMenu* menu, EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& selectedNodes);
+        void AddAssignNodeGroupSubmenu(QMenu* menu, EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& selectedNodes);
         void AddPreviewMotionSubmenu(QMenu* menu, AnimGraphActionManager* actionManager, const EMotionFX::AnimGraphNode* selectedNode);
         void AddAnimGraphObjectCategoryMenu(AnimGraphPlugin* plugin, QMenu* parentMenu,
             EMotionFX::AnimGraphObject::ECategory category, EMotionFX::AnimGraphObject* focusedGraphObject);
@@ -104,7 +104,14 @@ namespace EMStudio
     public slots:
         void DeleteSelectedItems();
         void OnContextMenuCreateNode();
-        void OnNodeGroupSelected();
+
+        void OnNodeGroupCreated();
+        void OnNodeGroupAssigned();
+        void OnRenameNodeGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup);
+        void OnChangeNodeGroupColor(EMotionFX::AnimGraphNodeGroup* nodeGroup);
+        void OnRemoveNodeGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup);
+        void OnHideGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup);
+
         void EnableSelectedTransitions()                    { SetSelectedTransitionsEnabled(true); }
         void DisableSelectedTransitions()                   { SetSelectedTransitionsEnabled(false); }
 
@@ -118,6 +125,8 @@ namespace EMStudio
 
         EMotionFX::AnimGraphStateTransition* FindTransitionForConnection(NodeConnection* connection) const;
         EMotionFX::BlendTreeConnection* FindBlendTreeConnection(NodeConnection* connection) const;
+
+        void AssignNodesToGroup(EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& nodes, EMotionFX::AnimGraphNodeGroup* group);
 
         // We are going to cache the NodeGraph that we have been focusing on
         // so we can swap them quickly.

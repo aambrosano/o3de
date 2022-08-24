@@ -6,6 +6,7 @@
  *
  */
 
+#include <AzQtComponents/Components/Widgets/ColorPicker.h>
 #include <AzQtComponents/Utilities/Conversions.h>
 #include <EMotionFX/CommandSystem/Source/AnimGraphConnectionCommands.h>
 #include <EMotionFX/CommandSystem/Source/AnimGraphNodeCommands.h>
@@ -1170,8 +1171,110 @@ namespace EMStudio
         }
     }
 
+    void BlendGraphWidget::AssignNodesToGroup(EMotionFX::AnimGraph* animGraph, const AZStd::vector<EMotionFX::AnimGraphNode*>& nodes, EMotionFX::AnimGraphNodeGroup* group)
+    {
+        MCore::CommandGroup commandGroup("Adjust anim graph node group");
 
-    void BlendGraphWidget::OnNodeGroupSelected()
+        AZStd::vector<AZStd::string> nodeNames;
+        for (EMotionFX::AnimGraphNode* node : nodes)
+        {
+            EMotionFX::AnimGraphNodeGroup* nodeGroup = animGraph->FindNodeGroupForNode(node);
+            if (nodeGroup)
+            {
+                auto* command = aznew CommandSystem::CommandAnimGraphAdjustNodeGroup(
+                    GetCommandManager()->FindCommand(CommandSystem::CommandAnimGraphAdjustNodeGroup::s_commandName),
+                    /*animGraphId = */ animGraph->GetID(),
+                    /*name = */ nodeGroup->GetNameString(),
+                    /*visible = */ AZStd::nullopt,
+                    /*newName = */ AZStd::nullopt,
+                    /*nodeNames = */ {{node->GetNameString()}},
+                    /*nodeAction = */ CommandSystem::CommandAnimGraphAdjustNodeGroup::NodeAction::Remove
+                );
+                commandGroup.AddCommand(command);
+            }
+
+            nodeNames.emplace_back(node->GetName());
+        }
+
+        if (!nodeNames.empty())
+        {
+            nodeNames.pop_back();
+        }
+
+        if (group)
+        {
+            auto* command = aznew CommandSystem::CommandAnimGraphAdjustNodeGroup(
+                GetCommandManager()->FindCommand(CommandSystem::CommandAnimGraphAdjustNodeGroup::s_commandName),
+                /*animGraphId = */ animGraph->GetID(),
+                /*name = */ group->GetNameString(),
+                /*visible = */ AZStd::nullopt,
+                /*newName = */ AZStd::nullopt,
+                /*nodeNames = */ nodeNames,
+                /*nodeAction = */ CommandSystem::CommandAnimGraphAdjustNodeGroup::NodeAction::Add
+            );
+            commandGroup.AddCommand(command);
+        }
+
+        AZStd::string outResult;
+        if (!GetCommandManager()->ExecuteCommandGroup(commandGroup, outResult))
+        {
+            AZ_Error("EMotionFX", false, outResult.c_str());
+        }
+    }
+
+    void BlendGraphWidget::OnNodeGroupCreated()
+    {
+        assert(sender()->inherits("QAction"));
+
+        // Don't create node group if there's no selection (the create group option should only appear when right clicking a node)
+        const QItemSelection selection = m_plugin->GetAnimGraphModel().GetSelectionModel().selection();
+        const QModelIndexList selectionList = selection.indexes();
+        if (selectionList.empty())
+        {
+            return;
+        }
+
+        // add the parameter
+        EMotionFX::AnimGraph* animGraph = m_plugin->GetActiveAnimGraph();
+        if (animGraph == nullptr)
+        {
+            MCore::LogWarning("BlendGraphWidget::OnNodeGroupCreated() - No AnimGraph active!");
+            return;
+        }
+
+        AZStd::string commandString;
+        AZStd::string resultString;
+        commandString = AZStd::string::format("AnimGraphAddNodeGroup -animGraphID %i", animGraph->GetID());
+
+        // execute the command
+        if (GetCommandManager()->ExecuteCommand(commandString.c_str(), resultString) == false)
+        {
+            if (resultString.size() > 0)
+            {
+                MCore::LogError(resultString.c_str());
+            }
+        }
+        else
+        {
+            AZStd::vector<EMotionFX::AnimGraphNode*> nodes;
+            for (const QModelIndex& selectedIndex : selectionList)
+            {
+                // Skip transitions and blend tree connections.
+                if (selectedIndex.data(AnimGraphModel::ROLE_MODEL_ITEM_TYPE).value<AnimGraphModel::ModelItemType>() != AnimGraphModel::ModelItemType::NODE)
+                {
+                    continue;
+                }
+
+                nodes.push_back(selectedIndex.data(AnimGraphModel::ROLE_NODE_POINTER).value<EMotionFX::AnimGraphNode*>());
+            }
+
+            EMotionFX::AnimGraphNodeGroup* newGroup = animGraph->GetNodeGroup(animGraph->GetNumNodeGroups() - 1);
+
+            AssignNodesToGroup(animGraph, nodes, newGroup);
+        }
+    }
+
+    void BlendGraphWidget::OnNodeGroupAssigned()
     {
         assert(sender()->inherits("QAction"));
         QAction* action = qobject_cast<QAction*>(sender());
@@ -1193,19 +1296,10 @@ namespace EMStudio
 
         // get the node group name from the action and search the node group
         EMotionFX::AnimGraphNodeGroup* newNodeGroup;
-        if (action->data().toInt() == 0)
-        {
-            newNodeGroup = nullptr;
-        }
-        else
-        {
-            const AZStd::string nodeGroupName = FromQtString(action->text());
-            newNodeGroup = animGraph->FindNodeGroupByName(nodeGroupName.c_str());
-        }
+        const AZStd::string nodeGroupName = FromQtString(action->text());
+        newNodeGroup = animGraph->FindNodeGroupByName(nodeGroupName.c_str());
 
-        MCore::CommandGroup commandGroup("Adjust anim graph node group");
-
-        AZStd::vector<AZStd::string> nodeNames;
+        AZStd::vector<EMotionFX::AnimGraphNode*> nodes;
         for (const QModelIndex& selectedIndex : selectionList)
         {
             // Skip transitions and blend tree connections.
@@ -1214,50 +1308,11 @@ namespace EMStudio
                 continue;
             }
 
-            EMotionFX::AnimGraphNode* selectedNode = selectedIndex.data(AnimGraphModel::ROLE_NODE_POINTER).value<EMotionFX::AnimGraphNode*>();
-            EMotionFX::AnimGraphNodeGroup* nodeGroup = animGraph->FindNodeGroupForNode(selectedNode);
-            if (nodeGroup)
-            {
-                auto* command = aznew CommandSystem::CommandAnimGraphAdjustNodeGroup(
-                    GetCommandManager()->FindCommand(CommandSystem::CommandAnimGraphAdjustNodeGroup::s_commandName),
-                    /*animGraphId = */ animGraph->GetID(),
-                    /*name = */ nodeGroup->GetNameString(),
-                    /*visible = */ AZStd::nullopt,
-                    /*newName = */ AZStd::nullopt,
-                    /*nodeNames = */ {{selectedNode->GetNameString()}},
-                    /*nodeAction = */ CommandSystem::CommandAnimGraphAdjustNodeGroup::NodeAction::Remove
-                );
-                commandGroup.AddCommand(command);
-            }
-
-            nodeNames.emplace_back(selectedNode->GetName());
-        }
-        if (!nodeNames.empty())
-        {
-            nodeNames.pop_back();
+            nodes.push_back(selectedIndex.data(AnimGraphModel::ROLE_NODE_POINTER).value<EMotionFX::AnimGraphNode*>());
         }
 
-        if (newNodeGroup)
-        {
-            auto* command = aznew CommandSystem::CommandAnimGraphAdjustNodeGroup(
-                GetCommandManager()->FindCommand(CommandSystem::CommandAnimGraphAdjustNodeGroup::s_commandName),
-                /*animGraphId = */ animGraph->GetID(),
-                /*name = */ newNodeGroup->GetNameString(),
-                /*visible = */ AZStd::nullopt,
-                /*newName = */ AZStd::nullopt,
-                /*nodeNames = */ nodeNames,
-                /*nodeAction = */ CommandSystem::CommandAnimGraphAdjustNodeGroup::NodeAction::Add
-            );
-            commandGroup.AddCommand(command);
-        }
-
-        AZStd::string outResult;
-        if (!GetCommandManager()->ExecuteCommandGroup(commandGroup, outResult))
-        {
-            AZ_Error("EMotionFX", false, outResult.c_str());
-        }
+        AssignNodesToGroup(animGraph, nodes, newNodeGroup);
     }
-
 
     bool BlendGraphWidget::PreparePainting()
     {
@@ -1279,6 +1334,29 @@ namespace EMStudio
         return true;
     }
 
+    void BlendGraphWidget::OnRenameNodeGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup)
+    {
+        GetActiveGraph()->EnableNameEditForNodeGroup(nodeGroup);
+    }
+
+    void BlendGraphWidget::OnChangeNodeGroupColor(EMotionFX::AnimGraphNodeGroup* nodeGroup)
+    {
+        AZ::Color nodeGroupColor;
+        nodeGroupColor.FromU32(nodeGroup->GetColor());
+
+        AZ::Color newGroupColor = AzQtComponents::ColorPicker::getColor(AzQtComponents::ColorPicker::Configuration::RGB, nodeGroupColor, QStringLiteral("Color Picker RGB"), QString(), QStringList(), this);
+        nodeGroup->SetColor(newGroupColor.ToU32());
+    }
+
+    void BlendGraphWidget::OnRemoveNodeGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup)
+    {
+        GetActiveGraph()->RemoveNodeGroup(nodeGroup);
+    }
+
+    void BlendGraphWidget::OnHideGroup(EMotionFX::AnimGraphNodeGroup* nodeGroup)
+    {
+        GetActiveGraph()->HideNodeGroup(nodeGroup);
+    }
 
     // enable or disable node visualization
     void BlendGraphWidget::OnVisualizeToggle(GraphNode* node, bool visualizeEnabled)
